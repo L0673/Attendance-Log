@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attendance Log</title>
+<style>
+  :root{
+    --bg:#0d1117;
+    --panel:#161b22;
+    --border:#30363d;
+    --text:#e6edf3;
+    --muted:#8b949e;
+    --empty:#21262d;
+    --level-1:#0e4429;
+    --level-2:#006d32;
+    --level-3:#26a641;
+    --level-4:#39d353;
+    --bad:#f85149;
+    --accent:#2f81f7;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:"JetBrains Mono","Fira Code","Cascadia Code",Consolas,"Courier New",monospace;
+    padding:32px 24px 70px;
+  }
+  .wrap{max-width:1400px;margin:0 auto;}
+  h1{font-size:28px;margin:0 0 6px;}
+  .subtitle{color:var(--muted);font-size:16px;margin-bottom:26px;}
+
+  .stats{
+    display:flex;gap:14px;flex-wrap:wrap;margin-bottom:26px;
+  }
+  .stat-card{
+    background:var(--panel);border:1px solid var(--border);
+    border-radius:10px;padding:14px 22px;min-width:150px;
+  }
+  .stat-card .num{font-size:28px;font-weight:700;}
+  .stat-card .lbl{color:var(--muted);font-size:14px;margin-top:4px;}
+  .info{position:relative;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-inline-start:6px;
+    border:1px solid var(--muted);border-radius:50%;font-size:10px;font-style:italic;font-weight:700;color:var(--muted);cursor:help;vertical-align:1px;outline:none;}
+  .info:hover,.info:focus{color:var(--text);border-color:var(--text);}
+  .info-tip{display:none;position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);width:230px;z-index:20;
+    background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;
+    font-size:12px;font-style:normal;font-weight:400;line-height:1.5;color:var(--text);text-align:start;box-shadow:0 6px 18px rgba(0,0,0,.45);}
+  .info:hover .info-tip,.info:focus .info-tip{display:block;}
+  .stat-card .sub{font-size:12px;margin-top:3px;color:var(--muted);min-height:16px;}
+  .stat-card .sub.better{color:var(--level-4);}
+  .stat-card .sub.worse{color:var(--bad);}
+
+  .progress-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:20px;}
+  .progress-card{flex:2 1 320px;}
+  .head-actions{display:flex;gap:8px;}
+  #turtleLayer{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden;}
+  .turtle,.food{
+    position:absolute;left:0;top:0;will-change:transform;
+    pointer-events:auto;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;
+  }
+  .turtle{z-index:1;}
+  .food{z-index:2;}
+  .food svg{display:block;}
+  .food.eating{pointer-events:none;}
+  .turtle.held,.food.held{z-index:5;cursor:grabbing;filter:drop-shadow(0 6px 5px rgba(0,0,0,.45));}
+  #turtleBtn{font-size:26px;line-height:30px;padding:4px 8px;}
+  .export-btn.icon-only{padding:4px 8px;display:flex;align-items:center;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;}
+  .export-btn.icon-only svg{display:block;}
+  .turtle svg{display:block;}
+  .turtle .legB{display:none;}
+  .turtle.step .legA{display:none;}
+  .turtle.step .legB{display:inline;}
+  .turtle.step svg{transform:translateY(-1px);}
+  .turtle.held svg,.turtle.held.step svg{transform:rotate(-14deg);}
+  .turtle .heart{
+    position:absolute;left:50%;top:-8px;color:#ff6b9d;font-size:16px;line-height:1;
+    animation:heartUp .9s ease-out forwards;
+  }
+  @keyframes heartUp{
+    from{transform:translate(-50%,0);opacity:1;}
+    to{transform:translate(-50%,-28px);opacity:0;}
+  }
+  .head-row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;}
+  .export-btn{
+    background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:9px 14px;font-size:14px;cursor:pointer;font-family:inherit;
+  }
+  .export-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .progress-card .lbl{margin:0;}
+  .progress-head{
+    display:flex;justify-content:space-between;align-items:baseline;
+    margin-bottom:10px;
+  }
+  .progress-bar{
+    display:flex;gap:1px;height:22px;
+  }
+  .progress-bar .day{flex:1 1 0;min-width:1px;background:var(--empty);position:relative;cursor:default;}
+  .progress-bar .day:first-child{border-radius:4px 0 0 4px;}
+  .progress-bar .day:last-child{border-radius:0 4px 4px 0;}
+  .progress-bar .day:hover{outline:2px solid var(--accent);outline-offset:1px;z-index:1;}
+  .progress-bar .day.past{background:var(--accent);}
+  .progress-bar .day.today{background:var(--level-4);}
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:24px;
+  }
+
+  .cal-grid{
+    display:grid;
+    gap:6px;
+    width:100%;
+    align-items:center;
+  }
+  .month-label{
+    font-size:16px;color:var(--muted);text-align:start;
+    padding-bottom:6px;white-space:nowrap;
+  }
+  .day-label{
+    font-size:15px;color:var(--muted);
+    padding-inline-end:10px;white-space:nowrap;text-align:start;
+  }
+  .cell{
+    width:100%;aspect-ratio:1/1;min-width:16px;border-radius:5px;
+    background:var(--empty);
+    cursor:default;
+    position:relative;
+  }
+  .cell.clickable{cursor:pointer;}
+  .cell.clickable:hover{outline:2px solid var(--accent);outline-offset:1px;}
+  .cell.today{box-shadow:0 0 0 2px var(--text);}
+  .cell.out-of-range{background:transparent;}
+  .cell.level-1{background:var(--level-1);}
+  .cell.level-2{background:var(--level-2);}
+  .cell.level-3{background:var(--level-3);}
+  .cell.level-4{background:var(--level-4);}
+  .cell.bad{background:var(--bad);}
+  .spacer{width:100%;}
+  .footer{
+    text-align:center;color:var(--muted);font-size:12px;
+    margin-top:120px;opacity:.7;letter-spacing:.5px;
+  }
+
+  .legend{
+    display:flex;align-items:center;gap:8px;margin-top:20px;
+    color:var(--muted);font-size:15px;flex-wrap:wrap;
+  }
+  .legend .cell{cursor:default;width:20px;height:20px;aspect-ratio:unset;}
+  .legend .cell:hover{outline:none;}
+
+  /* modal */
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);
+    display:none;align-items:center;justify-content:center;z-index:50;
+  }
+  .overlay.open{display:flex;}
+  .modal{
+    position:relative;
+    background:var(--panel);border:1px solid var(--border);
+    border-radius:10px;padding:20px;width:280px;
+  }
+  .modal-close{
+    position:absolute;top:10px;right:10px;
+    width:26px;height:26px;border-radius:6px;border:none;
+    background:transparent;color:var(--muted);cursor:pointer;
+    font-size:15px;display:flex;align-items:center;justify-content:center;
+    font-family:inherit;
+  }
+  .modal-close:hover{background:var(--empty);color:var(--text);}
+  .modal h3{margin:0 0 4px;font-size:17px;padding-right:20px;}
+  .modal .date-str{color:var(--muted);font-size:13px;margin-bottom:14px;}
+  .modal .field-label{
+    display:block;color:var(--muted);font-size:12px;margin-bottom:5px;
+  }
+  .label-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+  .label-row .field-label{margin-bottom:0;}
+  .modal button.now-btn{
+    flex:0 0 auto;padding:2px 9px;font-size:12px;border-radius:5px;
+    background:transparent;color:var(--accent);border-color:var(--accent);
+  }
+  .modal input[type=time]{
+    width:100%;background:var(--bg);border:1px solid var(--border);
+    color:var(--text);border-radius:6px;padding:9px;font-size:15px;
+    margin-bottom:14px;color-scheme:dark;
+    font-family:inherit;
+  }
+  .hours-preview{
+    background:var(--bg);border:1px solid var(--border);border-radius:6px;
+    padding:9px 10px;margin-bottom:14px;font-size:13px;color:var(--muted);
+    text-align:center;
+  }
+  .hours-preview .val{color:var(--text);font-weight:700;}
+  .modal .row{display:flex;gap:8px;}
+  .modal button{
+    flex:1;padding:9px 10px;border-radius:6px;border:1px solid var(--border);
+    background:#21262d;color:var(--text);cursor:pointer;font-size:14px;
+    font-family:inherit;
+  }
+  .modal button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .modal button.icon-btn{
+    flex:0 0 auto;width:40px;padding:9px 0;font-size:16px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .modal button.icon-btn.danger{color:var(--bad);}
+  .modal button.icon-btn.note-on{border-color:var(--accent);color:var(--accent);}
+  .modal textarea{
+    display:none;width:100%;box-sizing:border-box;min-height:80px;resize:vertical;
+    background:var(--bg);border:1px solid var(--border);color:var(--text);
+    border-radius:6px;padding:9px;font-size:14px;font-family:inherit;margin-bottom:14px;
+  }
+  .modal textarea.open{display:block;}
+  .modal button:hover{filter:brightness(1.1);}
+  .cell.has-note::after{
+    content:"";position:absolute;top:3px;right:3px;width:5px;height:5px;
+    border-radius:50%;background:#fff;opacity:.85;
+  }
+
+  .tooltip{
+    position:fixed;background:#1c2128;border:1px solid var(--border);
+    color:var(--text);padding:7px 11px;border-radius:6px;font-size:13px;
+    pointer-events:none;z-index:60;white-space:nowrap;display:none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head-row">
+    <div>
+      <h1>Attendance Log</h1>
+      <div class="subtitle">Click any weekday cell within range to log your arrival &amp; departure time</div>
+    </div>
+    <div class="head-actions">
+      <button class="export-btn icon-only" id="foodBtn" title="Drag food to the turtle"></button>
+      <button class="export-btn" id="turtleBtn" title="Turtle on/off">&#128034;</button>
+      <button class="export-btn" id="exportBtn" title="Download all entries as Excel (2 sheets)">Export Excel</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card"><div class="num" id="statLogged">0</div><div class="lbl">Logged</div></div>
+    <div class="stat-card"><div class="num" id="statBest">0</div><div class="lbl">Best time (&le;7:15)</div></div>
+    <div class="stat-card"><div class="num" id="statBad">0</div><div class="lbl">Late (after 9:30)</div></div>
+    <div class="stat-card"><div class="num" id="statAvgArrival">-</div><div class="lbl">Arrival rating<span class="info" tabindex="0">i<span class="info-tip" id="statAvgArrivalTip"></span></span></div></div>
+    <div class="stat-card"><div class="num" id="statAvgHours">-</div><div class="lbl">Avg hours/day</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="legend">
+      <span>More</span>
+      <div class="cell level-4"></div>
+      <div class="cell level-2"></div>
+      <div class="cell level-1"></div>
+      <div class="cell bad"></div>
+      <div class="cell empty"></div>
+      <span>Less</span>
+      <span style="margin-inline-start:16px;">Bright green = Best (up to 7:15) &middot; Medium green = Good (7:15-8:00) &middot; Dark green = Fair (8:00-9:30) &middot; Red = Late (after 9:30)</span>
+    </div>
+  </div>
+
+  <div class="progress-row">
+    <div class="stat-card progress-card">
+      <div class="progress-head">
+        <div class="lbl" id="progressLabel">Aug 23 &ndash; Feb 22</div>
+        <div class="num" id="progressPercent" style="font-size:18px;">0%</div>
+      </div>
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="stat-card"><div class="num" id="statLeft">0</div><div class="lbl">Working days left</div></div>
+    <div class="stat-card"><div class="num" id="statTotalDays">0</div><div class="lbl">Total days</div></div>
+  </div>
+
+  <div class="footer">made by L0</div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <button class="modal-close" id="cancelBtn" title="Cancel">&#10005;</button>
+    <h3>Log attendance</h3>
+    <div class="date-str" id="modalDate"></div>
+    <div class="label-row"><label class="field-label">Arrival time</label><button type="button" class="now-btn" data-target="timeInput">Now</button></div>
+    <input type="time" id="timeInput">
+    <div class="label-row"><label class="field-label">Departure time (optional)</label><button type="button" class="now-btn" data-target="timeOutInput">Now</button></div>
+    <input type="time" id="timeOutInput">
+    <div class="hours-preview" id="hoursPreview">Hours worked: <span class="val">-</span></div>
+    <textarea id="noteInput" placeholder="Add a note for this day..."></textarea>
+    <div class="row">
+      <button class="primary" id="saveBtn">Save</button>
+      <button class="icon-btn" id="noteBtn" title="Add note">&#128221;</button>
+      <button class="icon-btn danger" id="deleteBtn" title="Delete entry">&#128465;</button>
+    </div>
+  </div>
+</div>
+
+<div id="turtleLayer" aria-hidden="true"></div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const START_DATE = new Date(2026, 8, 20); // Sep 20, 2026
+const END_DATE   = new Date(2027, 1, 22); // Feb 22, 2027
+const WEEKEND_DAYS = [5, 6]; // Friday=5, Saturday=6
+const PROGRESS_START = new Date(2026, 7, 23); // Aug 23, 2026
+const PROGRESS_END   = new Date(2027, 1, 22); // Feb 22, 2027
+
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAY_LABELS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+let attendanceData = {};
+
+function fmtDate(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function toMinutes(hhmm){
+  const [h,m] = hhmm.split(":").map(Number);
+  return h*60+m;
+}
+function fmtClock(mins){ return Math.floor(mins/60) + ":" + String(mins%60).padStart(2,"0"); }
+// Names for each arrival range (same ranges as the heatmap colors)
+const CATEGORIES = [
+  {cls:"level-4", name:"Best", range:"up to 7:15", color:"var(--level-4)"},
+  {cls:"level-2", name:"Good", range:"7:15-8:00", color:"var(--level-3)"},
+  {cls:"level-1", name:"Fair", range:"8:00-9:30", color:"var(--level-2)"},
+  {cls:"bad",     name:"Late", range:"after 9:30", color:"var(--bad)"}
+];
+// Arrival rating = the range you land in most often. A tie goes to the better (earlier) range.
+function arrivalCategory(){
+  const counts = CATEGORIES.map(()=>0);
+  let total = 0;
+  let cur = new Date(START_DATE);
+  while(cur <= END_DATE){
+    if(!WEEKEND_DAYS.includes(cur.getDay())){
+      const e = attendanceData[fmtDate(cur)];
+      if(e && e.in){
+        const i = CATEGORIES.findIndex(c => c.cls === colorClass(e));
+        if(i >= 0){ counts[i]++; total++; }
+      }
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  if(!total) return null;
+  let top = 0;
+  counts.forEach((c,i)=>{ if(c > counts[top]) top = i; });
+  const tiedNames = CATEGORIES.filter((c,i)=>counts[i]===counts[top]).map(c=>c.name);
+  return {cat: CATEGORIES[top], count: counts[top], total, tied: tiedNames.length > 1, tiedNames};
+}
+function colorClass(entry){
+  if(!entry || !entry.in) return "empty";
+  const mins = toMinutes(entry.in);
+  if(mins <= 435) return "level-4";              // up to 7:15 (ideal window 6:50-7:15, anything earlier is fine too) = best
+  if(mins <= 480) return "level-2";               // 7:15-8:00 = good, clearly different from best
+  if(mins <= 570) return "level-1";               // 8:00-9:30 = below average, darker
+  return "bad";                                    // after 9:30 = not good (red)
+}
+function hoursBetween(inTime, outTime){
+  if(!inTime || !outTime) return null;
+  let diff = toMinutes(outTime) - toMinutes(inTime);
+  if(diff < 0) diff += 24*60; // handle rare overnight case
+  return diff / 60;
+}
+function formatHours(hrs){
+  if(hrs === null || isNaN(hrs)) return "-";
+  const h = Math.floor(hrs);
+  const m = Math.round((hrs - h) * 60);
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+function buildGrid(){
+  const grid = document.getElementById("calGrid");
+  grid.innerHTML = "";
+
+  // Build week columns starting from the Sunday on/before START_DATE
+  const gridStart = new Date(START_DATE);
+  gridStart.setDate(gridStart.getDate() - gridStart.getDay());
+  const gridEnd = new Date(END_DATE);
+  gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()));
+
+  const weeks = [];
+  let cur = new Date(gridStart);
+  while(cur <= gridEnd){
+    const week = [];
+    for(let i=0;i<7;i++){
+      week.push(new Date(cur));
+      cur.setDate(cur.getDate()+1);
+    }
+    weeks.push(week);
+  }
+
+  // Determine which week columns start a new month (for spacing)
+  const monthStarts = [];
+  let trackMonth = null;
+  weeks.forEach((week, i)=>{
+    const m = week[0].getMonth();
+    monthStarts.push(i > 0 && m !== trackMonth);
+    trackMonth = m;
+  });
+
+  // Build column template: label column, then for each week a spacer (at month starts) + 1fr track
+  let cols = "max-content";
+  weeks.forEach((week, i)=>{
+    if(monthStarts[i]) cols += " 12px";
+    cols += " 1fr";
+  });
+  grid.style.gridTemplateColumns = cols;
+
+  // Month label row
+  grid.appendChild(document.createElement("div")); // empty corner
+  let lastMonth = null;
+  weeks.forEach((week, i)=>{
+    if(monthStarts[i]) grid.appendChild(document.createElement("div")); // spacer
+    const cell = document.createElement("div");
+    cell.className = "month-label";
+    const firstDay = week[0];
+    const m = firstDay.getMonth();
+    if(m !== lastMonth){
+      cell.textContent = MONTH_NAMES[m];
+      lastMonth = m;
+    }
+    grid.appendChild(cell);
+  });
+
+  // Day rows (7 rows)
+  for(let dow=0; dow<7; dow++){
+    const labelCell = document.createElement("div");
+    labelCell.className = "day-label";
+    labelCell.textContent = DAY_LABELS[dow];
+    grid.appendChild(labelCell);
+
+    weeks.forEach((week, i)=>{
+      if(monthStarts[i]) grid.appendChild(document.createElement("div")); // spacer
+      const date = week[dow];
+      const cell = document.createElement("div");
+      const inRange = date >= START_DATE && date <= END_DATE;
+      const isWeekend = WEEKEND_DAYS.includes(date.getDay());
+      const isToday = fmtDate(date) === fmtDate(new Date());
+
+      if(!inRange){
+        cell.className = "cell out-of-range";
+      } else if(isWeekend){
+        cell.className = "cell empty";
+      } else {
+        const key = fmtDate(date);
+        const val = attendanceData[key];
+        cell.className = "cell clickable " + colorClass(val) + (val && noteFor(key, val) ? " has-note" : "");
+        cell.dataset.date = key;
+        cell.addEventListener("click", ()=>openModal(date));
+        cell.addEventListener("mousemove", e=>showTooltip(e, date, val));
+        cell.addEventListener("mouseleave", hideTooltip);
+      }
+      if(inRange && isToday) cell.classList.add("today");
+      grid.appendChild(cell);
+    });
+  }
+}
+
+// Notes are also kept in this browser (localStorage) because the server may only keep arrival/departure.
+const NOTES_KEY = "attendanceNotes";
+let notesCache = null;
+function loadNotes(){
+  if(notesCache) return notesCache;
+  try{ notesCache = JSON.parse(localStorage.getItem(NOTES_KEY) || "{}") || {}; }catch(e){ notesCache = {}; }
+  return notesCache;
+}
+function storeNote(key, note){
+  const n = loadNotes();
+  n[key] = note || "";
+  try{ localStorage.setItem(NOTES_KEY, JSON.stringify(n)); }catch(e){}
+}
+function noteFor(key, entry){
+  if(entry && entry.note) return entry.note;          // saved on the server
+  const n = loadNotes();                               // older notes that only exist in this browser
+  return (entry && n[key]) || "";
+}
+
+function showTooltip(e, date, entry){
+  const tip = document.getElementById("tooltip");
+  const dateStr = date.toLocaleDateString("en-US", {weekday:"long", day:"numeric", month:"long", year:"numeric"});
+  if(entry && entry.in){
+    let line = `${dateStr} — in ${entry.in}`;
+    if(entry.out){
+      line += `, out ${entry.out} (${formatHours(hoursBetween(entry.in, entry.out))})`;
+    }
+    const noteTxt = noteFor(fmtDate(date), entry);
+    if(noteTxt){
+      const n = noteTxt.replace(/\s+/g," ");
+      line += ` — 📝 ${n.length > 60 ? n.slice(0,60) + "…" : n}`;
+    }
+    tip.textContent = line;
+  } else {
+    tip.textContent = `${dateStr} — no entry`;
+  }
+  tip.style.display = "block";
+  tip.style.left = (e.clientX + 12) + "px";
+  tip.style.top = (e.clientY + 12) + "px";
+}
+function showTextTooltip(e, text){
+  const tip = document.getElementById("tooltip");
+  tip.textContent = text;
+  tip.style.display = "block";
+  tip.style.left = (e.clientX + 12) + "px";
+  tip.style.top = (e.clientY + 12) + "px";
+}
+function hideTooltip(){
+  document.getElementById("tooltip").style.display = "none";
+}
+
+let selectedDate = null;
+function updateHoursPreview(){
+  const inVal = document.getElementById("timeInput").value;
+  const outVal = document.getElementById("timeOutInput").value;
+  const hrs = hoursBetween(inVal, outVal);
+  document.querySelector("#hoursPreview .val").textContent = formatHours(hrs);
+}
+function openModal(date){
+  selectedDate = date;
+  const key = fmtDate(date);
+  const entry = attendanceData[key];
+  document.getElementById("modalDate").textContent =
+    date.toLocaleDateString("en-US", {weekday:"long", day:"numeric", month:"long", year:"numeric"});
+  document.getElementById("timeInput").value = (entry && entry.in) || "";
+  document.getElementById("timeOutInput").value = (entry && entry.out) || "";
+  updateHoursPreview();
+  const noteVal = noteFor(key, entry);
+  document.getElementById("noteInput").value = noteVal;
+  setNoteOpen(!!noteVal);
+  document.getElementById("overlay").classList.add("open");
+}
+function setNoteOpen(open){
+  document.getElementById("noteInput").classList.toggle("open", open);
+  document.getElementById("noteBtn").classList.toggle("note-on", open || !!document.getElementById("noteInput").value.trim());
+  if(open) document.getElementById("noteInput").focus();
+}
+function closeModal(){
+  document.getElementById("overlay").classList.remove("open");
+  selectedDate = null;
+}
+
+async function saveEntry(entry){
+  const key = fmtDate(selectedDate);
+  try{
+    const res = await fetch("/api/save", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({date:key, entry})
+    });
+    const json = await res.json();
+    if(json.ok){
+      attendanceData = json.data;
+      buildGrid();
+      updateStats();
+    } else {
+      alert("Something went wrong: " + (json.error || ""));
+    }
+  } catch(err){
+    alert("Couldn't reach the server. Make sure server.py is running (python3 server.py) and you're viewing the page at http://localhost:8000, then try again.");
+  }
+}
+
+document.querySelectorAll(".now-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const d = new Date();
+    document.getElementById(btn.dataset.target).value =
+      String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+    updateHoursPreview();
+  });
+});
+
+function csvCell(v){
+  const t = String(v ?? "");
+  return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g,'""') + '"' : t;
+}
+function downloadBlob(blob, name){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+function logRows(asText){
+  const rows = [["date","day","arrival","departure","hours","note"]];
+  Object.keys(attendanceData).sort().forEach(key=>{
+    const e = attendanceData[key];
+    if(!e || !e.in) return;
+    const [y,m,d] = key.split("-").map(Number);
+    const hrs = hoursBetween(e.in, e.out);
+    rows.push([key, DAY_LABELS[new Date(y,m-1,d).getDay()], e.in, e.out || "",
+               hrs === null ? "" : (asText ? hrs.toFixed(2) : Number(hrs.toFixed(2))), noteFor(key, e)]);
+  });
+  return rows;
+}
+// same numbers as the stat cards (weekdays inside the period)
+function computeSummary(){
+  let best = 0, late = 0, logged = 0, arrivalSum = 0, hoursSum = 0, hoursCount = 0;
+  let cur = new Date(START_DATE);
+  while(cur <= END_DATE){
+    if(!WEEKEND_DAYS.includes(cur.getDay())){
+      const entry = attendanceData[fmtDate(cur)];
+      if(entry && entry.in){
+        logged++; arrivalSum += toMinutes(entry.in);
+        const cls = colorClass(entry);
+        if(cls === "level-4") best++;
+        if(cls === "bad") late++;
+        const hrs = hoursBetween(entry.in, entry.out);
+        if(hrs !== null){ hoursSum += hrs; hoursCount++; }
+      }
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  let avgArrival = "-";
+  if(logged){ const a = Math.round(arrivalSum / logged); avgArrival = Math.floor(a/60) + ":" + String(a%60).padStart(2,"0"); }
+  const uc = arrivalCategory();
+  return {best, late, avgArrival, usual: uc ? uc.cat.name + " (" + uc.cat.range + ")" : "-", usualShare: uc ? uc.count + " of " + uc.total + " days" : "-",
+          avgHours: hoursCount ? hoursSum / hoursCount : null};
+}
+function summaryRows(asText){
+  const sm = computeSummary();
+  const hrs = sm.avgHours === null ? "-" : (asText ? sm.avgHours.toFixed(2) : Number(sm.avgHours.toFixed(2)));
+  return [["metric","value"],
+          ["Best time arrival (\u22647:15)", sm.best],
+          ["Late arrival (after 9:30)", sm.late],
+          ["Avg arrival", sm.avgArrival],
+          ["Arrival rating", sm.usual],
+          ["Arrival rating basis", sm.usualShare],
+          ["Avg hours/day", hrs]];
+}
+// XLSX-START  (tiny built-in .xlsx writer, no libraries, works offline)
+const CRC_TABLE = (()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; } return t; })();
+function crc32(buf){ let c=0xFFFFFFFF; for(let i=0;i<buf.length;i++) c = CRC_TABLE[(c^buf[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function zipStore(files){
+  const enc = new TextEncoder(), parts = [], central = [];
+  let offset = 0;
+  files.forEach(f=>{
+    const name = enc.encode(f.name), data = enc.encode(f.text), crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true); lh.setUint16(8,0,true);
+    lh.setUint16(10,0,true); lh.setUint16(12,0x21,true); lh.setUint32(14,crc,true);
+    lh.setUint32(18,data.length,true); lh.setUint32(22,data.length,true); lh.setUint16(26,name.length,true); lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer), name, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true); ch.setUint16(8,0x0800,true); ch.setUint16(10,0,true);
+    ch.setUint16(12,0,true); ch.setUint16(14,0x21,true); ch.setUint32(16,crc,true);
+    ch.setUint32(20,data.length,true); ch.setUint32(24,data.length,true); ch.setUint16(28,name.length,true);
+    ch.setUint32(42,offset,true);
+    central.push(new Uint8Array(ch.buffer), name);
+    offset += 30 + name.length + data.length;
+  });
+  let cdSize = 0; central.forEach(p=>cdSize += p.length);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true); end.setUint16(8,files.length,true); end.setUint16(10,files.length,true);
+  end.setUint32(12,cdSize,true); end.setUint32(16,offset,true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)],
+                  {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+function xmlEsc(t){
+  return String(t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+// styles: 1 = header (bold, grey), 2 = number with 2 decimals, 3 = time hh:mm, 5 = duration hh:mm
+function sheetXml(rows, widths, numberCols, strStyle){
+  const cols = widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("");
+  const body = rows.map((row,r)=>{
+    const cells = row.map((v,c)=>{
+      if(v === null || v === undefined || v === "") return "";
+      const ref = String.fromCharCode(65+c) + (r+1);
+      if(typeof v === "number"){
+        const st = r>0 ? numberCols.map(f=>f(r,c)).find(Boolean) : 0;
+        const s = st ? ` s="${st}"` : "";
+        return `<c r="${ref}"${s}><v>${v}</v></c>`;
+      }
+      const ss = strStyle ? (strStyle(r,c) || (r===0 ? 1 : 0)) : (r===0 ? 1 : 0);
+      return `<c r="${ref}"${ss ? ` s="${ss}"` : ""} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+    }).join("");
+    return `<row r="${r+1}">${cells}</row>`;
+  }).join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`+
+    `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`+
+    `<cols>${cols}</cols><sheetData>${body}</sheetData></worksheet>`;
+}
+function buildXlsx(logRowsArr, summaryRowsArr){
+  // "9:16" becomes a real Excel time so it lines up (right side) with the other numbers
+  const sumRows = summaryRowsArr.map((row,i)=>{
+    const m = i>0 && /arrival$/i.test(String(row[0])) && /^(\d+):(\d{2})$/.exec(String(row[1]));
+    if(i>0 && /hours/i.test(String(row[0])) && typeof row[1] === "number") return [row[0], row[1] / 24];   // shown as 08:41
+    return m ? [row[0], (Number(m[1])*60 + Number(m[2])) / 1440] : row;
+  });
+  // hours column of the log sheet: real duration so it shows as 08:41
+  const logRowsX = logRowsArr.map((row,i)=> i>0 && typeof row[4] === "number" ? row.map((v,k)=> k===4 ? v/24 : v) : row);
+  const head = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`;
+  const files = [
+    {name:"[Content_Types].xml", text: head+`<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`},
+    {name:"_rels/.rels", text: head+`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:"xl/workbook.xml", text: head+`<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Attendance" sheetId="1" r:id="rId1"/><sheet name="Summary" sheetId="2" r:id="rId2"/></sheets></workbook>`},
+    {name:"xl/_rels/workbook.xml.rels", text: head+`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`},
+    {name:"xl/styles.xml", text: head+`<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="hh:mm"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="right"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right"/></xf><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="right"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`},
+    {name:"xl/worksheets/sheet1.xml", text: sheetXml(logRowsX, [13,12,10,11,11,40], [(r,c)=>c===4 && 5])},
+    {name:"xl/worksheets/sheet2.xml", text: sheetXml(sumRows, [32,22], [(r,c)=>c===1 && /hours/i.test(String(sumRows[r][0])) && 5, (r,c)=>c===1 && /arrival$/i.test(String(sumRows[r][0])) && typeof sumRows[r][1]==="number" && 3], (r,c)=>c===1 ? (r===0 ? 6 : 4) : 0)}
+  ];
+  return zipStore(files);
+}
+// XLSX-END
+document.getElementById("exportBtn").addEventListener("click", ()=>{
+  downloadBlob(buildXlsx(logRows(false), summaryRows(false)), "attendance.xlsx");   // sheet 1: log, sheet 2: summary
+});
+
+document.getElementById("timeInput").addEventListener("input", updateHoursPreview);
+document.getElementById("timeOutInput").addEventListener("input", updateHoursPreview);
+
+document.getElementById("saveBtn").addEventListener("click", ()=>{
+  const inVal = document.getElementById("timeInput").value;
+  const outVal = document.getElementById("timeOutInput").value;
+  if(!inVal){ alert("Pick an arrival time first"); return; }
+  const noteVal = document.getElementById("noteInput").value.trim();
+  const entry = {in: inVal, out: outVal || null};
+  if(noteVal) entry.note = noteVal;
+  storeNote(fmtDate(selectedDate), noteVal);
+  saveEntry(entry).then(closeModal);
+});
+document.getElementById("noteBtn").addEventListener("click", ()=>{
+  const ta = document.getElementById("noteInput");
+  setNoteOpen(!ta.classList.contains("open"));
+});
+document.getElementById("deleteBtn").addEventListener("click", ()=>{
+  storeNote(fmtDate(selectedDate), "");
+  saveEntry(null).then(closeModal);
+});
+document.getElementById("cancelBtn").addEventListener("click", closeModal);
+document.getElementById("overlay").addEventListener("click", (e)=>{
+  if(e.target.id === "overlay") closeModal();
+});
+
+function updateStats(){
+  let total=0, left=0, logged=0, best=0, bad=0, hoursSum=0, hoursCount=0, arrivalSum=0;
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  let cur = new Date(START_DATE);
+  while(cur <= END_DATE){
+    if(!WEEKEND_DAYS.includes(cur.getDay())){
+      total++;
+      if(cur > todayStart) left++;
+      const entry = attendanceData[fmtDate(cur)];
+      if(entry && entry.in){
+        logged++;
+        arrivalSum += toMinutes(entry.in);
+        const cls = colorClass(entry);
+        if(cls === "level-4") best++;
+        if(cls === "bad") bad++;
+        const hrs = hoursBetween(entry.in, entry.out);
+        if(hrs !== null){ hoursSum += hrs; hoursCount++; }
+      }
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  document.getElementById("statLeft").textContent = left;
+  document.getElementById("statLogged").textContent = logged;
+  document.getElementById("statBest").textContent = best;
+  document.getElementById("statBad").textContent = bad;
+  const uc = arrivalCategory();
+  const numEl = document.getElementById("statAvgArrival"), tipEl = document.getElementById("statAvgArrivalTip");
+  if(!uc){
+    numEl.textContent = "-"; numEl.style.color = "";
+    tipEl.textContent = "Log a day to see your rating.";
+  } else {
+    numEl.textContent = uc.cat.name; numEl.style.color = uc.cat.color;
+    tipEl.textContent = uc.tied
+      ? uc.tiedNames.join(" and ") + " are tied at " + uc.count + " days each, so you get the better one."
+      : uc.count + " of " + uc.total + " days were " + uc.cat.name + ", the most of any rating.";
+  }
+  document.getElementById("statAvgHours").textContent = hoursCount ? formatHours(hoursSum / hoursCount) : "-";
+}
+
+function buildProgressBar(){
+  const bar = document.getElementById("progressBar");
+  bar.innerHTML = "";
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  let cur = new Date(PROGRESS_START);
+  let totalDays = 0, passedDays = 0;
+  while(cur <= PROGRESS_END){
+    const day = document.createElement("div");
+    day.className = "day";
+    totalDays++;
+    if(cur.getTime() === today.getTime()){
+      day.className += " today";
+      passedDays++;
+    } else if(cur < today){
+      day.className += " past";
+      passedDays++;
+    }
+    const dayDate = new Date(cur);
+    const dayNum = totalDays;
+    day.addEventListener("mousemove", e=>showTextTooltip(e,
+      dayDate.toLocaleDateString("en-US", {weekday:"short", day:"numeric", month:"short", year:"numeric"}) + ` — day ${dayNum}`));
+    day.addEventListener("mouseleave", hideTooltip);
+    bar.appendChild(day);
+    cur.setDate(cur.getDate()+1);
+  }
+  const pct = Math.min(100, (passedDays / totalDays) * 100);
+  document.getElementById("progressPercent").textContent = pct.toFixed(1) + "%";
+  document.getElementById("statTotalDays").textContent = totalDays;
+}
+
+async function init(){
+  try{
+    const res = await fetch("/api/data");
+    attendanceData = await res.json();
+  }catch(e){
+    attendanceData = {};
+  }
+  buildGrid();
+  updateStats();
+  buildProgressBar();
+}
+init();
+
+// refresh the progress bar when the day changes (in case the tab stays open for days)
+let lastProgressDay = new Date().toDateString();
+function refreshIfNewDay(){
+  const d = new Date().toDateString();
+  if(d !== lastProgressDay){ lastProgressDay = d; buildGrid(); buildProgressBar(); updateStats(); }
+}
+setInterval(refreshIfNewDay, 60000);
+document.addEventListener("visibilitychange", () => { if(!document.hidden) refreshIfNewDay(); });
+
+// ---------- pixel turtle + food ----------
+(function(){
+  const layer = document.getElementById("turtleLayer");
+  const turtleBtn = document.getElementById("turtleBtn");
+  const foodBtn = document.getElementById("foodBtn");
+  const NS = "http://www.w3.org/2000/svg";
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function rect(g, x, y, w, h, c){
+    const r = document.createElementNS(NS, "rect");
+    r.setAttribute("x", x); r.setAttribute("y", y);
+    r.setAttribute("width", w); r.setAttribute("height", h);
+    r.setAttribute("fill", c);
+    g.appendChild(r);
+  }
+  function group(svg, cls){
+    const g = document.createElementNS(NS, "g");
+    if(cls) g.setAttribute("class", cls);
+    svg.appendChild(g);
+    return g;
+  }
+
+  // ----- turtle sprite (green) -----
+  function buildTurtle(width){
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 16 11");
+    svg.setAttribute("shape-rendering", "crispEdges");
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", Math.round(width * 11 / 16));
+    const SHELL="#2d9a4b", SPOT="#5fd27b", BELLY="#e6c98f", SKIN="#8bd17c";
+    const legA = group(svg, "skin legA");
+    rect(legA, 3, 7, 2, 2, SKIN); rect(legA, 10, 7, 2, 2, SKIN);
+    const legB = group(svg, "skin legB");
+    rect(legB, 4, 7, 2, 2, SKIN); rect(legB, 9, 7, 2, 2, SKIN);
+    const body = group(svg, "body");
+    rect(body, 4, 2, 6, 1, SHELL); rect(body, 3, 3, 8, 1, SHELL);
+    rect(body, 2, 4, 10, 3, SHELL);
+    rect(body, 5, 3, 2, 1, SPOT); rect(body, 8, 4, 2, 1, SPOT); rect(body, 4, 5, 2, 1, SPOT); rect(body, 7, 6, 2, 1, SPOT);
+    rect(body, 3, 7, 8, 1, BELLY);
+    const head = group(svg, "skin head");
+    rect(head, 11, 4, 4, 3, SKIN); rect(head, 12, 3, 3, 1, SKIN);
+    rect(head, 13, 4, 1, 2, "#1a1a1a"); rect(head, 14, 4, 1, 1, "#ffffff");
+    rect(head, 12, 5, 1, 1, "#ff8fb7");
+    rect(head, 1, 6, 1, 1, SKIN);
+    return svg;
+  }
+
+  // ----- pixel food (12x12 each) -----
+  const PAL = {g:"#2e7d32",G:"#66bb6a",y:"#c5e1a5",l:"#43a047",L:"#81c784",o:"#f28c28",O:"#c8660e",
+               s:"#6d7a2b",z:"#3f9142",Z:"#2c6b30",r:"#e53935",R:"#b71c1c",w:"#ffffff",k:"#222222",p:"#ffb74d",Y:"#ffe082",c:"#d2544f",m:"#7b2a2a",M:"#8b2b2b",
+               f:"#d9585f",q:"#e99590",d:"#b5484f",a:"#b7dc9e",b:"#6aae6e",e:"#3f7f52"};
+  const FOODS = {
+    lettuce:["..gg.gg.gg..",
+             ".gGGgGGgGGg.",
+             "gGGGGGGGGGGg",
+             "gGGGGyyGGGGg",
+             "gGyGGyyGGyGg",
+             "gGGyGyyGyGGg",
+             "gLGGGyyGGGLg",
+             "gLLGGGGGGLLg",
+             "gLLLgGGgLLLg",
+             ".gLLLggLLLg.",
+             "..gLLLLLLg..",
+             "...gggggg..."],
+    carrot:["....l.l.l...","....lLlLl...",".....lLl....","...oooooo...","...oOoooo...","....oooOo...",
+            "....oooo....",".....oOo....",".....ooo....","......oo....","......o.....","............"],
+    zucchini:["............","............","..ss........","..szzzzzzz..",".zzyyzzzzzz.",".zyzzzzzzzz.",
+              ".zzzzzzzzZz.",".zzzzzZZzzz.","..zZZZZZZZ..","............","............","............"],
+    abutilon:["......mm...Yo...",
+              ".....mccmmmoYY..",
+              "....mccccccoYo..",
+              "...mcccmccoccm..",
+              ".mmmccMMcocccm..",
+              ".mccmcMMocccccm.",
+              ".mcccmMMMmmmccm.",
+              ".mccccmMmcccmcm.",
+              "..mccmccmcccccm.",
+              "..gmmmcccmccccm.",
+              ".glllmcccmcmccm.",
+              ".glllmmmmmm.mm..",
+              "......gggggg....",
+              ".......glllg....",
+              "........gllg....",
+              ".........gg....."],
+    melon:[".....kk.....",
+           "....kqdk....",
+           "....kqdk....",
+           "...kqfkdk...",
+           "...kqffdk...",
+           "..kqfkffdk..",
+           "..kqfffkdk..",
+           ".kqfkffffdk.",
+           ".kqfffffkdk.",
+           "kaaaaaaaaaak",
+           ".kbbbbbbbbk.",
+           "..kkkkkkkk.."]
+  };
+  const FOOD_TYPES = Object.keys(FOODS);
+  function foodSvg(type, px){ return gridSvg(FOODS[type], px); }
+  function gridSvg(rows, px){
+    const n = rows.length;
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 " + n + " " + n);
+    svg.setAttribute("shape-rendering", "crispEdges");
+    svg.setAttribute("width", n * px); svg.setAttribute("height", n * px);
+    rows.forEach((row, y)=>{
+      let x = 0;
+      while(x < n){
+        const ch = row[x];
+        if(ch === "."){ x++; continue; }
+        let run = 1;
+        while(x + run < n && row[x + run] === ch) run++;
+        rect(svg, x, y, run, 1, PAL[ch]);
+        x += run;
+      }
+    });
+    return svg;
+  }
+
+  // ----- state -----
+  const TW = 52, TH = Math.round(52 * 11 / 16);
+  const turtle = {
+    el: document.createElement("div"), flip: document.createElement("div"),
+    w: TW, h: TH, x: rand(0, Math.max(0, innerWidth - TW)), y: rand(0, Math.max(0, innerHeight - TH)),
+    dir: 1, mode: "walk", vx: 0, vy: 0, tx: 0, ty: 0, retarget: 0, pauseUntil: 0,
+    acc: 0, step: false, nextStep: 0, held: false, eating: null, bites: 0, nextBite: 0,
+    fleeing: false, foodTarget: null, faceUntil: 0, lift: 0, happyStart: 0, nextSpark: 0
+  };
+  turtle.el.className = "turtle";
+  turtle.flip.appendChild(buildTurtle(TW));
+  turtle.el.appendChild(turtle.flip);
+  layer.appendChild(turtle.el);
+
+  const foods = [];
+  let drag = null;
+  let mx = -1e4, my = -1e4, lastMove = 0;
+  let bag = [], cycle = 0;
+  function nextFoodType(prev){
+    if(!bag.length){
+      cycle++;
+      bag = FOOD_TYPES.filter(t => t !== "abutilon" || cycle % 2 === 0);   // flower: every second round
+      for(let i = bag.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      if(bag[bag.length - 1] === prev){ [bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]]; }
+    }
+    return bag.pop();
+  }
+  let nextType = nextFoodType(null);
+
+  function place(o){
+    o.el.style.transform = "translate(" + o.x + "px," + (o.y - (o.lift || 0)) + "px)";
+  }
+  function setStep(o, v){ o.step = v; o.el.classList.toggle("step", v); }
+  function wiggle(o, now, ms){
+    if(now >= o.nextStep){ setStep(o, !o.step); o.nextStep = now + ms; }
+  }
+  function face(o, dx){
+    if(Math.abs(dx) < 8) return;
+    const nd = dx >= 0 ? 1 : -1;
+    const t = performance.now();
+    if(nd !== o.dir && t >= (o.faceUntil || 0)){
+      o.dir = nd; o.faceUntil = t + 250;
+      o.flip.style.transform = "scaleX(" + nd + ")";
+    }
+  }
+  function pop(o, ch, color, dx){
+    const h = document.createElement("span");
+    h.className = "heart"; h.textContent = ch;
+    if(color) h.style.color = color;
+    h.style.marginLeft = (dx || 0) + "px";
+    o.el.appendChild(h);
+    setTimeout(()=>h.remove(), 900);
+  }
+  function heart(o){ pop(o, "\u2665"); }
+
+  // ----- food -----
+  function removeFood(f){
+    const i = foods.indexOf(f);
+    if(i >= 0) foods.splice(i, 1);
+    f.el.remove();
+  }
+  function spawnFood(type, cx, cy){
+    const el = document.createElement("div");
+    el.className = "food";
+    const grid = FOODS[type].map(r=>r.split(""));
+    el.appendChild(gridSvg(grid, 3));
+    layer.appendChild(el);
+    const sz = grid.length * 3;
+    const f = {el, type, grid, w: sz, h: sz, x: cx - sz/2, y: cy - sz/2, held: false, eating: false};
+    el.addEventListener("pointerdown", e=>{
+      if(f.eating) return;
+      e.preventDefault(); e.stopPropagation();
+      startDrag(f, e, e.clientX - f.x, e.clientY - f.y);
+    });
+    foods.push(f);
+    place(f);
+    while(foods.length > 6){
+      const old = foods.find(x=>!x.held && !x.eating);
+      if(!old) break;
+      removeFood(old);
+    }
+    return f;
+  }
+  // take a round bite out of the pixels on the side facing the turtle; returns pixels left
+  function biteFood(f, from, facing){
+    const g = f.grid, n = g.length;
+    let dx = from.x - (f.x + f.w/2), dy = from.y - (f.y + f.h/2);
+    const d = Math.hypot(dx, dy);
+    if(d < 4){ dx = facing; dy = 0; } else { dx /= d; dy /= d; }
+    let best = null, bs = -1e9;
+    for(let y = 0; y < n; y++) for(let x = 0; x < n; x++){
+      if(g[y][x] === ".") continue;
+      const sc = (x + 0.5 - n/2) * dx + (y + 0.5 - n/2) * dy;
+      if(sc > bs){ bs = sc; best = [x + 0.5, y + 0.5]; }
+    }
+    if(!best) return 0;
+    const r = n > 12 ? 4.4 : 2.9;
+    const bx = best[0] - dx * 1.0, by = best[1] - dy * 1.0;
+    let left = 0;
+    for(let y = 0; y < n; y++) for(let x = 0; x < n; x++){
+      if(g[y][x] === ".") continue;
+      if(Math.hypot(x + 0.5 - bx, y + 0.5 - by) <= r) g[y][x] = ".";
+      else left++;
+    }
+    for(let y = 0; y < n; y++) for(let x = 0; x < n; x++){
+      if(g[y][x] === ".") continue;
+      const nb = (y > 0 && g[y-1][x] !== ".") || (y < n-1 && g[y+1][x] !== ".") ||
+                 (x > 0 && g[y][x-1] !== ".") || (x < n-1 && g[y][x+1] !== ".");
+      if(!nb){ g[y][x] = "."; left--; }
+    }
+    f.el.replaceChildren(gridSvg(g, 3));
+    return left;
+  }
+  function nearestFood(cx, cy){
+    let best = null, bd = 1e9;
+    foods.forEach(f=>{
+      if(f.eating) return;
+      const d = Math.hypot(f.x + f.w/2 - cx, f.y + f.h/2 - cy);
+      if(d < bd){ bd = d; best = f; }
+    });
+    return best;
+  }
+  function refreshFoodIcon(){ foodBtn.replaceChildren(foodSvg(nextType, FOODS[nextType].length > 12 ? 2 : 2.5)); }
+
+  // ----- dragging (turtle + food) -----
+  function startDrag(o, e, offX, offY){
+    if(drag) endDrag();
+    if(o === turtle){ if(turtle.mode === "eat") cancelEating(); turtle.lift = 0; }
+    drag = {obj: o, id: e.pointerId, offX, offY, samples: []};
+    o.held = true; o.mode = o === turtle ? "walk" : o.mode;
+    o.el.classList.add("held");
+    try{ o.el.setPointerCapture(e.pointerId); }catch(err){}
+    moveHeld(e);
+  }
+  function moveHeld(e){
+    const o = drag.obj, now = performance.now();
+    o.x = clamp(e.clientX - drag.offX, 0, Math.max(0, innerWidth - o.w));
+    o.y = clamp(e.clientY - drag.offY, 0, Math.max(0, innerHeight - o.h));
+    drag.samples.push({x: e.clientX, y: e.clientY, t: now});
+    while(drag.samples.length > 2 && now - drag.samples[0].t > 120) drag.samples.shift();
+    place(o);
+  }
+  function endDrag(){
+    if(!drag) return;
+    const o = drag.obj, s = drag.samples, now = performance.now();
+    drag = null;
+    o.held = false;
+    o.el.classList.remove("held");
+    if(o !== turtle) return;
+    let vx = 0, vy = 0;
+    if(s.length >= 2 && now - s[s.length - 1].t < 100){
+      const a = s[0], b = s[s.length - 1], dt = (b.t - a.t) / 1000;
+      if(dt > 0.01){ vx = (b.x - a.x) / dt; vy = (b.y - a.y) / dt; }
+    }
+    const sp = Math.hypot(vx, vy);
+    if(sp > 1600){ vx *= 1600 / sp; vy *= 1600 / sp; }
+    if(sp > 80){
+      turtle.mode = "fly"; turtle.vx = vx; turtle.vy = vy;
+    } else {
+      turtle.mode = "walk"; turtle.pauseUntil = now + 800;
+    }
+  }
+  window.addEventListener("pointermove", e=>{
+    mx = e.clientX; my = e.clientY; lastMove = performance.now();
+    if(drag && e.pointerId === drag.id) moveHeld(e);
+  }, {passive: true});
+  window.addEventListener("pointerup", e=>{
+    if(drag && e.pointerId === drag.id) endDrag();
+    if(e.pointerType === "touch"){ mx = my = -1e4; }
+  });
+  window.addEventListener("pointercancel", ()=>endDrag());
+  document.documentElement.addEventListener("mouseleave", ()=>{ mx = my = -1e4; });
+
+  turtle.el.addEventListener("pointerdown", e=>{
+    if(e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    startDrag(turtle, e, e.clientX - turtle.x, e.clientY - turtle.y);
+  });
+  foodBtn.addEventListener("pointerdown", e=>{
+    if(e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
+    const type = nextType;
+    nextType = nextFoodType(type);
+    refreshFoodIcon();
+    const f = spawnFood(type, e.clientX, e.clientY);
+    startDrag(f, e, f.w / 2, f.h / 2);
+  });
+
+  // ----- eating -----
+  function startEating(f, now){
+    turtle.mode = "eat"; turtle.eating = f; turtle.bites = 0; turtle.nextBite = now + 400;
+    f.eating = true; f.el.classList.add("eating");
+    face(turtle, f.x + f.w/2 - (turtle.x + turtle.w/2));
+  }
+  function cancelEating(){
+    const f = turtle.eating;
+    if(f){ f.eating = false; f.el.classList.remove("eating"); }
+    turtle.eating = null; turtle.mode = "walk";
+  }
+
+  // ----- per-frame update -----
+  function update(dt, now){
+    const T = turtle;
+    const W = Math.max(0, innerWidth - T.w), H = Math.max(0, innerHeight - T.h);
+    if(T.held){ wiggle(T, now, 110); return; }
+
+    if(T.mode === "fly"){
+      T.x += T.vx * dt; T.y += T.vy * dt;
+      if(T.x < 0){ T.x = 0; T.vx = Math.abs(T.vx) * 0.6; } else if(T.x > W){ T.x = W; T.vx = -Math.abs(T.vx) * 0.6; }
+      if(T.y < 0){ T.y = 0; T.vy = Math.abs(T.vy) * 0.6; } else if(T.y > H){ T.y = H; T.vy = -Math.abs(T.vy) * 0.6; }
+      const k = Math.exp(-2.4 * dt); T.vx *= k; T.vy *= k;
+      if(Math.abs(T.vx) > 20) face(T, T.vx);
+      wiggle(T, now, 90);
+      if(Math.hypot(T.vx, T.vy) < 18){ T.mode = "walk"; T.vx = T.vy = 0; T.pauseUntil = now + 1200; setStep(T, false); }
+      place(T); return;
+    }
+
+    if(T.mode === "happy"){
+      const k = now - T.happyStart;
+      T.lift = Math.abs(Math.sin(k / 110)) * 14;
+      wiggle(T, now, 70);
+      if(now >= T.nextSpark){
+        T.nextSpark = now + 130;
+        const r = Math.random();
+        if(r < 0.6) pop(T, "\u2665", "#ff6b9d", rand(-18, 18));
+        else pop(T, "\u2605", "#ffd54f", rand(-18, 18));
+      }
+      if(k >= 1900){ T.mode = "walk"; T.lift = 0; T.pauseUntil = now + 500; setStep(T, false); }
+      place(T); return;
+    }
+
+    if(T.mode === "eat"){
+      const f = T.eating;
+      wiggle(T, now, 110);
+      if(now >= T.nextBite){
+        T.bites++;
+        T.nextBite = now + 400;
+        let left = 0;
+        const maxBites = f.grid.length > 12 ? 6 : 4;
+        if(T.bites < maxBites) left = biteFood(f, {x: T.x + T.w/2, y: T.y + T.h/2}, T.dir);
+        if(T.bites >= maxBites || left <= 5){
+          const special = f.type === "abutilon";
+          removeFood(f); heart(T);
+          T.eating = null; setStep(T, false);
+          if(special){ T.mode = "happy"; T.happyStart = now; T.nextSpark = now; }
+          else { T.mode = "walk"; T.pauseUntil = now + 800; }
+        }
+      }
+      return;
+    }
+
+    const cx = T.x + T.w/2, cy = T.y + T.h/2;
+    let vx = 0, vy = 0, speed = 0;
+    let food = T.foodTarget;
+    if(!food || food.eating || foods.indexOf(food) < 0) food = T.foodTarget = nearestFood(cx, cy);
+    if(food){
+      const fx = food.x + food.w/2, fy = food.y + food.h/2, d = Math.hypot(fx - cx, fy - cy);
+      if(!food.held && d < 30){ startEating(food, now); return; }
+      face(T, fx - cx);
+      if(!(food.held && d < 75)){ vx = (fx - cx) / (d || 1); vy = (fy - cy) / (d || 1); speed = 55; }
+    } else {
+      const dx = cx - mx, dy = cy - my, d = Math.hypot(dx, dy);
+      const active = now - lastMove < 1500;
+      if(T.fleeing){ if(d > 170 || !active) T.fleeing = false; }
+      else if(active && d < 110){ T.fleeing = true; }
+      if(T.fleeing){
+        T.tx = 0;
+        vx = dx / (d || 1); vy = dy / (d || 1);
+        if((T.x <= 0 && vx < 0) || (T.x >= W && vx > 0)){ vx = 0; vy = vy >= 0 ? 1 : -1; }
+        if((T.y <= 0 && vy < 0) || (T.y >= H && vy > 0)){ vy = 0; vx = vx >= 0 ? 1 : -1; }
+        speed = 65;
+      } else if(now >= T.pauseUntil){
+        if(!T.tx || Math.hypot(T.tx - cx, T.ty - cy) < 8 || now > T.retarget){
+          for(let i = 0; i < 10; i++){
+            T.tx = rand(T.w/2, innerWidth - T.w/2); T.ty = rand(T.h/2, innerHeight - T.h/2);
+            if(!active || Math.hypot(T.tx - mx, T.ty - my) > 200) break;
+          }
+          T.retarget = now + rand(4000, 8000);
+          if(Math.random() < 0.4) T.pauseUntil = now + rand(1000, 2800);
+        }
+        const ex = T.tx - cx, ey = T.ty - cy, ed = Math.hypot(ex, ey) || 1;
+        vx = ex / ed; vy = ey / ed; speed = 26;
+      }
+    }
+
+    if(speed > 0){
+      T.x = clamp(T.x + vx * speed * dt, 0, W);
+      T.y = clamp(T.y + vy * speed * dt, 0, H);
+      face(T, vx * 30);
+      T.acc += speed * dt;
+      if(T.acc > 7){ T.acc = 0; setStep(T, !T.step); }
+    }
+    place(T);
+  }
+
+  let raf = null, last = 0;
+  function frame(now){
+    const dt = Math.min(0.05, (now - last) / 1000 || 0);
+    last = now;
+    update(dt, now);
+    raf = requestAnimationFrame(frame);
+  }
+  window.addEventListener("resize", ()=>{
+    foods.forEach(f=>{
+      f.x = clamp(f.x, 0, Math.max(0, innerWidth - f.w));
+      f.y = clamp(f.y, 0, Math.max(0, innerHeight - f.h));
+      place(f);
+    });
+  });
+
+  function setEnabled(on){
+    layer.style.display = on ? "block" : "none";
+    foodBtn.style.display = on ? "flex" : "none";
+    turtleBtn.style.opacity = on ? "1" : ".5";
+    if(on && raf === null){ last = performance.now(); raf = requestAnimationFrame(frame); }
+    if(!on){
+      if(raf !== null){ cancelAnimationFrame(raf); raf = null; }
+      endDrag();
+    }
+    try{ localStorage.setItem("turtles", on ? "on" : "off"); }catch(e){}
+  }
+  let enabled = false;
+  try{ enabled = localStorage.getItem("turtles") === "on"; }catch(e){}
+  turtleBtn.addEventListener("click", ()=>{ enabled = !enabled; setEnabled(enabled); });
+  refreshFoodIcon();
+  place(turtle);
+  setEnabled(enabled);
+})();
+</script>
+</body>
+</html>
