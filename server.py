@@ -37,7 +37,6 @@ def hours_between(t_in, t_out):
 
 
 def read_entries():
-    """يقرأ data.json ويرجع التسجيلات فقط (يدعم الصيغة القديمة المسطحة)."""
     if not os.path.exists(DATA_FILE):
         return {}
     try:
@@ -51,7 +50,6 @@ def read_entries():
 
 
 def enrich(key, e):
-    """يكمّل بيانات اليوم: الدخول والخروج والملاحظة + اليوم والساعات."""
     y, m, d = map(int, key.split("-"))
     hrs = hours_between(e.get("in"), e.get("out"))
     rec = {
@@ -99,7 +97,6 @@ def compute_summary(entries):
 
 
 def save_entries(entries):
-    """يحفظ كل شي في data.json: التسجيلات الكاملة + الميتركس."""
     full = {k: enrich(k, v) for k, v in entries.items()}
     store = {"entries": full, "summary": compute_summary(full)}
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -137,7 +134,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 entry = payload.get("entry")  # {"in": "07:15", "out": "16:30", "note": "..."} or None
                 if not date:
                     raise ValueError("missing date")
-                Date.fromisoformat(date)  # يتأكد إن التاريخ صحيح
+                Date.fromisoformat(date)  
                 data = load_data()
                 if entry and (entry.get("in") or entry.get("out")):
                     record = {"in": entry.get("in") or None, "out": entry.get("out") or None}
@@ -170,10 +167,10 @@ socketserver.TCPServer.allow_reuse_address = True  # lets you restart the server
 
 if __name__ == "__main__":
     os.chdir(BASE_DIR)
-    save_entries(read_entries())  # ينشئ الملف أو يحدّث الملف القديم للصيغة الجديدة
+    save_entries(read_entries()) 
     with socketserver.TCPServer(("127.0.0.1", PORT), Handler) as httpd:
         print(f"الخادم شغال على: http://localhost:{PORT}")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print("\nتم إيقاف الخادم.")
+            print("\nتم إيقاف الخادم")
