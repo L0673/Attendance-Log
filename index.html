@@ -76,6 +76,20 @@
   .turtle.step svg{transform:translateY(-1px);}
   .turtle.held svg,.turtle.held.step svg{transform:rotate(-14deg);}
   .turtle.hid .skin{display:none !important;}
+  .bubble{
+    position:absolute;bottom:100%;margin-bottom:7px;box-sizing:border-box;white-space:nowrap;pointer-events:none;
+    background:#fff;color:#222;border:2px solid #222;border-radius:3px;padding:5px 7px;
+    font:700 11px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.3px;
+    animation:bubIn .18s ease-out;transition:opacity .5s;
+  }
+  .bubble.out{opacity:0;}
+  .bubble::before,.bubble::after{content:"";position:absolute;left:var(--tail,50%);border:5px solid transparent;}
+  .bubble::after{top:100%;margin-left:-5px;border-top-color:#222;}
+  .bubble::before{top:100%;margin-top:-3px;margin-left:-5px;border-top-color:#fff;z-index:1;}
+  .bubble.below{bottom:auto;top:100%;margin:7px 0 0;}
+  .bubble.below::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:#222;}
+  .bubble.below::before{top:auto;bottom:100%;margin-top:0;margin-bottom:-3px;border-top-color:transparent;border-bottom-color:#fff;}
+  @keyframes bubIn{from{transform:translateY(4px) scale(.85);opacity:0;}to{transform:none;opacity:1;}}
   .turtle .heart{
     position:absolute;left:50%;top:-8px;color:#ff6b9d;font-size:16px;line-height:1;
     animation:heartUp .9s ease-out forwards;
@@ -969,6 +983,8 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
   const foods = [];
   let drag = null;
   let mx = -1e4, my = -1e4, lastMove = 0, lastFoodDrop = 0;
+  let nextSay = 0, bubbleEl = null, bubbleTimers = [];
+  const GREETING = "Hi my name is B00 :)";
   let bag = [], cycle = 0;
   function nextFoodType(prev){
     if(!bag.length){
@@ -1009,6 +1025,43 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
     setTimeout(()=>h.remove(), 900);
   }
   function heart(o){ pop(o, "\u2665"); }
+
+  // small pixel speech bubble with a typewriter effect; cooldown keeps it from getting annoying
+  function clearBubble(){
+    bubbleTimers.forEach(clearTimeout); bubbleTimers = [];
+    if(bubbleEl){ bubbleEl.remove(); bubbleEl = null; }
+  }
+  function say(text){
+    const now = performance.now();
+    if(now < nextSay) return false;
+    clearBubble();
+    const b = document.createElement("div");
+    b.className = "bubble";
+    b.textContent = text;
+    if(turtle.y < 46) b.classList.add("below");
+    turtle.el.appendChild(b);
+    const w = b.offsetWidth;
+    b.style.width = w + "px";
+    // keep the bubble inside the screen, tail still points at the turtle
+    const cx = turtle.x + turtle.w / 2;
+    const left = clamp(cx - w / 2, 6, Math.max(6, innerWidth - w - 6));
+    b.style.left = (left - turtle.x) + "px";
+    b.style.setProperty("--tail", clamp(cx - left, 10, w - 10) + "px");
+    b.textContent = "";
+    bubbleEl = b;
+    let i = 0;
+    const type = ()=>{
+      i++; b.textContent = text.slice(0, i);
+      if(i < text.length) bubbleTimers.push(setTimeout(type, 55));
+      else {
+        bubbleTimers.push(setTimeout(()=>b.classList.add("out"), 2200));
+        bubbleTimers.push(setTimeout(clearBubble, 2700));
+      }
+    };
+    type();
+    nextSay = now + 9000;
+    return true;
+  }
 
   // ----- food -----
   function removeFood(f){
@@ -1083,7 +1136,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
   function startDrag(o, e, offX, offY){
     if(drag) endDrag();
     if(o === turtle){ if(turtle.mode === "eat" || turtle.mode === "hide") cancelEating(); turtle.lift = 0; }
-    drag = {obj: o, id: e.pointerId, offX, offY, samples: []};
+    drag = {obj: o, id: e.pointerId, offX, offY, samples: [], t0: performance.now()};
     o.held = true; o.mode = o === turtle ? "walk" : o.mode;
     o.el.classList.add("held");
     try{ o.el.setPointerCapture(e.pointerId); }catch(err){}
@@ -1099,7 +1152,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
   }
   function endDrag(){
     if(!drag) return;
-    const o = drag.obj, s = drag.samples, now = performance.now();
+    const o = drag.obj, s = drag.samples, now = performance.now(), t0 = drag.t0;
     drag = null;
     o.held = false;
     o.el.classList.remove("held");
@@ -1116,6 +1169,9 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
     } else {
       turtle.mode = "walk"; turtle.pauseUntil = now + 800;
     }
+    // quick tap (not a drag): say hi, or just a heart if she already talked recently
+    const moved = s.length ? Math.hypot(s[s.length-1].x - s[0].x, s[s.length-1].y - s[0].y) : 0;
+    if(now - t0 < 300 && moved < 6){ if(!say(GREETING)) heart(turtle); }
   }
   window.addEventListener("pointermove", e=>{
     mx = e.clientX; my = e.clientY; lastMove = performance.now();
@@ -1288,6 +1344,13 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
     foodBtn.style.display = on ? "flex" : "none";
     turtleBtn.style.opacity = on ? "1" : ".5";
     if(on && raf === null){ last = performance.now(); raf = requestAnimationFrame(frame); }
+    if(on){
+      let met = false;
+      try{ met = localStorage.getItem("turtleMet") === "1"; }catch(e){}
+      if(!met) setTimeout(()=>{
+        if(enabled && say(GREETING)){ try{ localStorage.setItem("turtleMet", "1"); }catch(e){} }
+      }, 1200);
+    } else clearBubble();
     if(!on){
       if(raf !== null){ cancelAnimationFrame(raf); raf = null; }
       endDrag();
