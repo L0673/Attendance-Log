@@ -64,7 +64,9 @@
   .food svg{display:block;}
   .food.eating{pointer-events:none;}
   .turtle.held,.food.held{z-index:5;cursor:grabbing;filter:drop-shadow(0 6px 5px rgba(0,0,0,.45));}
-  #turtleBtn{font-size:26px;line-height:30px;padding:4px 8px;}
+  #turtleBtn{display:flex;align-items:center;padding:4px 8px;}
+  #turtleBtn svg{display:block;}
+  #turtleBtn .legB{display:none;}
   .export-btn.icon-only{padding:4px 8px;display:flex;align-items:center;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;}
   .export-btn.icon-only svg{display:block;}
   .turtle svg{display:block;}
@@ -73,6 +75,7 @@
   .turtle.step .legB{display:inline;}
   .turtle.step svg{transform:translateY(-1px);}
   .turtle.held svg,.turtle.held.step svg{transform:rotate(-14deg);}
+  .turtle.hid .skin{display:none !important;}
   .turtle .heart{
     position:absolute;left:50%;top:-8px;color:#ff6b9d;font-size:16px;line-height:1;
     animation:heartUp .9s ease-out forwards;
@@ -239,7 +242,7 @@
     </div>
     <div class="head-actions">
       <button class="export-btn icon-only" id="foodBtn" title="Drag food to the turtle"></button>
-      <button class="export-btn" id="turtleBtn" title="Turtle on/off">&#128034;</button>
+      <button class="export-btn" id="turtleBtn" title="Turtle on/off"></button>
       <button class="export-btn" id="exportBtn" title="Download all entries as Excel (2 sheets)">Export Excel</button>
     </div>
   </div>
@@ -956,7 +959,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
     w: TW, h: TH, x: rand(0, Math.max(0, innerWidth - TW)), y: rand(0, Math.max(0, innerHeight - TH)),
     dir: 1, mode: "walk", vx: 0, vy: 0, tx: 0, ty: 0, retarget: 0, pauseUntil: 0,
     acc: 0, step: false, nextStep: 0, held: false, eating: null, bites: 0, nextBite: 0,
-    fleeing: false, foodTarget: null, faceUntil: 0, lift: 0, happyStart: 0, nextSpark: 0
+    fleeing: false, hideSince: 0, foodTarget: null, faceUntil: 0, lift: 0, happyStart: 0, nextSpark: 0
   };
   turtle.el.className = "turtle";
   turtle.flip.appendChild(buildTurtle(TW));
@@ -965,7 +968,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
 
   const foods = [];
   let drag = null;
-  let mx = -1e4, my = -1e4, lastMove = 0;
+  let mx = -1e4, my = -1e4, lastMove = 0, lastFoodDrop = 0;
   let bag = [], cycle = 0;
   function nextFoodType(prev){
     if(!bag.length){
@@ -1079,7 +1082,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
   // ----- dragging (turtle + food) -----
   function startDrag(o, e, offX, offY){
     if(drag) endDrag();
-    if(o === turtle){ if(turtle.mode === "eat") cancelEating(); turtle.lift = 0; }
+    if(o === turtle){ if(turtle.mode === "eat" || turtle.mode === "hide") cancelEating(); turtle.lift = 0; }
     drag = {obj: o, id: e.pointerId, offX, offY, samples: []};
     o.held = true; o.mode = o === turtle ? "walk" : o.mode;
     o.el.classList.add("held");
@@ -1100,7 +1103,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
     drag = null;
     o.held = false;
     o.el.classList.remove("held");
-    if(o !== turtle) return;
+    if(o !== turtle){ lastFoodDrop = now; return; }
     let vx = 0, vy = 0;
     if(s.length >= 2 && now - s[s.length - 1].t < 100){
       const a = s[0], b = s[s.length - 1], dt = (b.t - a.t) / 1000;
@@ -1150,6 +1153,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
     const f = turtle.eating;
     if(f){ f.eating = false; f.el.classList.remove("eating"); }
     turtle.eating = null; turtle.mode = "walk";
+    turtle.el.classList.remove("hid");
   }
 
   // ----- per-frame update -----
@@ -1183,8 +1187,25 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
       place(T); return;
     }
 
+    if(T.mode === "hide"){
+      const d = Math.hypot(T.x + T.w/2 - mx, T.y + T.h/2 - my);
+      const active = now - lastMove < 1500;
+      if(now - T.hideSince > 700 && (d > 170 || !active)){
+        T.el.classList.remove("hid");
+        T.mode = "eat"; T.nextBite = now + 500;
+      }
+      return;
+    }
+
     if(T.mode === "eat"){
       const f = T.eating;
+      if(now - lastFoodDrop > 1200 && now - lastMove < 1500 &&
+         Math.hypot(T.x + T.w/2 - mx, T.y + T.h/2 - my) < 110){
+        setStep(T, false);
+        T.el.classList.add("hid");
+        T.mode = "hide"; T.hideSince = now;
+        return;
+      }
       wiggle(T, now, 110);
       if(now >= T.nextBite){
         T.bites++;
@@ -1222,7 +1243,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
         vx = dx / (d || 1); vy = dy / (d || 1);
         if((T.x <= 0 && vx < 0) || (T.x >= W && vx > 0)){ vx = 0; vy = vy >= 0 ? 1 : -1; }
         if((T.y <= 0 && vy < 0) || (T.y >= H && vy > 0)){ vy = 0; vx = vx >= 0 ? 1 : -1; }
-        speed = 65;
+        speed = 85;
       } else if(now >= T.pauseUntil){
         if(!T.tx || Math.hypot(T.tx - cx, T.ty - cy) < 8 || now > T.retarget){
           for(let i = 0; i < 10; i++){
@@ -1276,6 +1297,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
   let enabled = false;
   try{ enabled = localStorage.getItem("turtles") === "on"; }catch(e){}
   turtleBtn.addEventListener("click", ()=>{ enabled = !enabled; setEnabled(enabled); });
+  turtleBtn.replaceChildren(buildTurtle(34));
   refreshFoodIcon();
   place(turtle);
   setEnabled(enabled);
