@@ -51,6 +51,11 @@
   .stat-card .sub.better{color:var(--level-4);}
   .stat-card .sub.worse{color:var(--bad);}
 
+  #timeLeftCard{width:230px;flex:none;box-sizing:border-box;white-space:nowrap;margin-inline-start:auto;}
+  #timeLeftNum{font-variant-numeric:tabular-nums;}
+  .stat-card.idle .num{color:var(--muted);}
+  .stat-card.done .num{color:var(--level-4);}
+
   .progress-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:20px;}
   .progress-card{flex:2 1 320px;}
   .head-actions{display:flex;gap:8px;}
@@ -64,10 +69,10 @@
   .food svg{display:block;}
   .food.eating{pointer-events:none;}
   .turtle.held,.food.held{z-index:5;cursor:grabbing;filter:drop-shadow(0 6px 5px rgba(0,0,0,.45));}
-  #turtleBtn{display:flex;align-items:center;padding:4px 8px;}
+  #turtleBtn{display:flex;align-items:center;justify-content:center;padding:4px 8px;width:49.7px;min-height:39.8px;box-sizing:border-box;}
   #turtleBtn svg{display:block;}
   #turtleBtn .legB{display:none;}
-  .export-btn.icon-only{padding:4px 8px;display:flex;align-items:center;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;}
+  .export-btn.icon-only{padding:4px 8px;display:flex;align-items:center;justify-content:center;width:49.7px;min-height:39.8px;box-sizing:border-box;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;}
   .export-btn.icon-only svg{display:block;}
   .turtle svg{display:block;}
   .turtle .legB{display:none;}
@@ -267,6 +272,11 @@
     <div class="stat-card"><div class="num" id="statBad">0</div><div class="lbl">Late (after 9:30)</div></div>
     <div class="stat-card"><div class="num" id="statAvgArrival">-</div><div class="lbl">Arrival rating<span class="info" tabindex="0">i<span class="info-tip" id="statAvgArrivalTip"></span></span></div></div>
     <div class="stat-card"><div class="num" id="statAvgHours">-</div><div class="lbl">Avg hours/day</div></div>
+    <div class="stat-card idle" id="timeLeftCard">
+      <div class="num" id="timeLeftNum">-</div>
+      <div class="lbl">Time left today</div>
+      <div class="sub" id="timeLeftSub"></div>
+    </div>
   </div>
 
   <div class="panel">
@@ -324,6 +334,9 @@
 const START_DATE = new Date(2026, 8, 20); // Sep 20, 2026
 const END_DATE   = new Date(2027, 1, 22); // Feb 22, 2027
 const WEEKEND_DAYS = [5, 6]; // Friday=5, Saturday=6
+const SHIFT_MIN = 8 * 60;          // length of the work day
+const WORK_START_MIN = 7 * 60;     // the countdown card is only active from 7:00 ...
+const WORK_END_MIN = 17 * 60 + 30; // ... until 17:30
 const PROGRESS_START = new Date(2026, 7, 23); // Aug 23, 2026
 const PROGRESS_END   = new Date(2027, 1, 22); // Feb 22, 2027
 
@@ -340,7 +353,7 @@ function toMinutes(hhmm){
   const [h,m] = hhmm.split(":").map(Number);
   return h*60+m;
 }
-function fmtClock(mins){ return Math.floor(mins/60) + ":" + String(mins%60).padStart(2,"0"); }
+function fmtClock(mins){ return ((Math.floor(mins/60) + 11) % 12 + 1) + ":" + String(mins%60).padStart(2,"0"); }
 // Names for each arrival range (same ranges as the heatmap colors)
 const CATEGORIES = [
   {cls:"level-4", name:"Best", range:"up to 7:15", color:"var(--level-4)"},
@@ -791,7 +804,43 @@ function updateStats(){
       : uc.count + " of " + uc.total + " days were " + uc.cat.name + ", the most of any rating.";
   }
   document.getElementById("statAvgHours").textContent = hoursCount ? formatHours(hoursSum / hoursCount) : "-";
+  renderTimeLeft();
 }
+
+// "Time left today" card: counts down the 8-hour shift from today's logged arrival time
+let dataReady = false;
+function renderTimeLeft(){
+  if(!dataReady) return;
+  const numEl = document.getElementById("timeLeftNum"), subEl = document.getElementById("timeLeftSub"), card = document.getElementById("timeLeftCard");
+  const show = (num, sub, state) => {
+    if(numEl.textContent !== num) numEl.textContent = num;
+    if(subEl.textContent !== sub) subEl.textContent = sub;
+    card.classList.toggle("idle", state === "idle");
+    card.classList.toggle("done", state === "done");
+  };
+  const now = new Date();
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nowSec = nowMin * 60 + now.getSeconds();
+  if(WEEKEND_DAYS.includes(day.getDay()) || day < START_DATE || day > END_DATE) return show("0h 00m", "Not a work day", "idle");
+  const entry = attendanceData[fmtDate(day)];
+  const arrived = entry && entry.in ? toMinutes(entry.in) : null;
+  // the 8 hours start counting at 7:00 at the earliest, even if you arrived before that
+  const exitMin = arrived === null ? null : Math.max(arrived, WORK_START_MIN) + SHIFT_MIN;
+  // active from 7:00 until 17:30 (or until the shift is done, if that is later)
+  const startMin = WORK_START_MIN;
+  const endMin = Math.max(WORK_END_MIN, exitMin || 0);
+  if(nowMin < startMin) return show("0h 00m", "Starts at " + fmtClock(WORK_START_MIN), "idle");
+  if(nowSec >= endMin * 60) return show("0h 00m", "Work hours are over", "idle");
+  if(arrived === null) return show("0h 00m", "Log your arrival to start", "idle");
+  if(entry.out) return show("Done", "Left at " + fmtClock(toMinutes(entry.out)) + " \u00b7 " + formatHours(hoursBetween(entry.in, entry.out)), "done");
+  const rem = exitMin * 60 - nowSec;
+  if(rem <= 0) return show("Done", "You can leave now", "done");
+  const totalMin = Math.ceil(rem / 60);
+  const h = Math.floor(totalMin / 60), m = totalMin % 60;
+  show(h + "h " + String(m).padStart(2, "0") + "m", "Leave at " + fmtClock(exitMin), "");
+}
+setInterval(renderTimeLeft, 1000);
 
 function buildProgressBar(){
   const bar = document.getElementById("progressBar");
@@ -831,6 +880,7 @@ async function init(){
   }catch(e){
     attendanceData = {};
   }
+  dataReady = true;
   buildGrid();
   updateStats();
   buildProgressBar();
@@ -984,7 +1034,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
   let drag = null;
   let mx = -1e4, my = -1e4, lastMove = 0, lastFoodDrop = 0;
   let nextSay = 0, bubbleEl = null, bubbleTimers = [];
-  const GREETING = "Hi my name is B00 :)";
+  const GREETING = "Hi my name is B00";
   let bag = [], cycle = 0;
   function nextFoodType(prev){
     if(!bag.length){
@@ -1360,7 +1410,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) refre
   let enabled = false;
   try{ enabled = localStorage.getItem("turtles") === "on"; }catch(e){}
   turtleBtn.addEventListener("click", ()=>{ enabled = !enabled; setEnabled(enabled); });
-  turtleBtn.replaceChildren(buildTurtle(34));
+  turtleBtn.replaceChildren(buildTurtle(32));
   refreshFoodIcon();
   place(turtle);
   setEnabled(enabled);
