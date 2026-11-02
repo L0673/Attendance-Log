@@ -18,6 +18,7 @@
     --level-4:#39d353;
     --bad:#f85149;
     --accent:#2f81f7;
+    --absent:#1b4b91;
   }
   *{box-sizing:border-box;}
   body{
@@ -160,6 +161,8 @@
   .cell.level-3{background:var(--level-3);}
   .cell.level-4{background:var(--level-4);}
   .cell.bad{background:var(--bad);}
+  .cell.absent{background:var(--absent);}
+  .modal.is-absent .time-fields{display:none;}
   .spacer{width:100%;}
   .footer{
     text-align:center;color:var(--muted);font-size:12px;
@@ -228,6 +231,7 @@
   }
   .modal button.icon-btn.danger{color:var(--bad);}
   .modal button.icon-btn.note-on{border-color:var(--accent);color:var(--accent);}
+  .modal button.icon-btn.absent-on{border-color:var(--accent);color:var(--accent);}
   .modal textarea{
     display:none;width:100%;box-sizing:border-box;min-height:80px;resize:vertical;
     background:var(--bg);border:1px solid var(--border);color:var(--text);
@@ -236,8 +240,10 @@
   .modal textarea.open{display:block;}
   .modal button:hover{filter:brightness(1.1);}
   .cell.has-note::after{
-    content:"";position:absolute;top:3px;right:3px;width:5px;height:5px;
-    border-radius:50%;background:#fff;opacity:.85;
+    content:"";position:absolute;top:0;right:0;width:11px;height:11px;
+    background:linear-gradient(to bottom left, var(--panel) 50%, rgba(255,255,255,.6) 50%);
+    border-top-right-radius:5px;border-bottom-left-radius:2px;
+    box-shadow:-1px 1px 2px rgba(0,0,0,.35);
   }
 
   .tooltip{
@@ -313,14 +319,17 @@
     <button class="modal-close" id="cancelBtn" title="Cancel">&#10005;</button>
     <h3>Log attendance</h3>
     <div class="date-str" id="modalDate"></div>
+    <div class="time-fields">
     <div class="label-row"><label class="field-label">Arrival time</label><button type="button" class="now-btn" data-target="timeInput">Now</button></div>
     <input type="time" id="timeInput">
     <div class="label-row"><label class="field-label">Departure time (optional)</label><button type="button" class="now-btn" data-target="timeOutInput">Now</button></div>
     <input type="time" id="timeOutInput">
     <div class="hours-preview" id="hoursPreview">Hours worked: <span class="val">-</span></div>
+    </div>
     <textarea id="noteInput" placeholder="Add a note for this day..."></textarea>
     <div class="row">
       <button class="primary" id="saveBtn">Save</button>
+      <button class="icon-btn" id="absentBtn" title="Didn't attend this day">&#128164;</button>
       <button class="icon-btn" id="noteBtn" title="Add note">&#128221;</button>
       <button class="icon-btn danger" id="deleteBtn" title="Delete entry">&#128465;</button>
     </div>
@@ -383,6 +392,7 @@ function arrivalCategory(){
   return {cat: CATEGORIES[top], count: counts[top], total, tied: tiedNames.length > 1, tiedNames};
 }
 function colorClass(entry){
+  if(entry && entry.absent && !entry.in) return "absent";
   if(!entry || !entry.in) return "empty";
   const mins = toMinutes(entry.in);
   if(mins <= 435) return "level-4";              // up to 7:15 (ideal window 6:50-7:15, anything earlier is fine too) = best
@@ -513,9 +523,9 @@ function noteFor(key, entry){
 function showTooltip(e, date, entry){
   const tip = document.getElementById("tooltip");
   const dateStr = date.toLocaleDateString("en-US", {weekday:"long", day:"numeric", month:"long", year:"numeric"});
-  if(entry && entry.in){
-    let line = `${dateStr} — in ${entry.in}`;
-    if(entry.out){
+  if(entry && (entry.in || entry.absent)){
+    let line = entry.in ? `${dateStr} — in ${entry.in}` : `${dateStr} — absent`;
+    if(entry.in && entry.out){
       line += `, out ${entry.out} (${formatHours(hoursBetween(entry.in, entry.out))})`;
     }
     const noteTxt = noteFor(fmtDate(date), entry);
@@ -561,7 +571,14 @@ function openModal(date){
   const noteVal = noteFor(key, entry);
   document.getElementById("noteInput").value = noteVal;
   setNoteOpen(!!noteVal);
+  setAbsent(!!(entry && entry.absent && !entry.in));
   document.getElementById("overlay").classList.add("open");
+}
+let absentOn = false;
+function setAbsent(on){
+  absentOn = on;
+  document.querySelector(".modal").classList.toggle("is-absent", on);
+  document.getElementById("absentBtn").classList.toggle("absent-on", on);
 }
 function setNoteOpen(open){
   document.getElementById("noteInput").classList.toggle("open", open);
@@ -747,8 +764,15 @@ document.getElementById("timeOutInput").addEventListener("input", updateHoursPre
 document.getElementById("saveBtn").addEventListener("click", ()=>{
   const inVal = document.getElementById("timeInput").value;
   const outVal = document.getElementById("timeOutInput").value;
-  if(!inVal){ alert("Pick an arrival time first"); return; }
   const noteVal = document.getElementById("noteInput").value.trim();
+  if(absentOn){
+    const entry = {absent: true};
+    if(noteVal) entry.note = noteVal;
+    storeNote(fmtDate(selectedDate), noteVal);
+    saveEntry(entry).then(closeModal);
+    return;
+  }
+  if(!inVal){ alert("Pick an arrival time first"); return; }
   const entry = {in: inVal, out: outVal || null};
   if(noteVal) entry.note = noteVal;
   storeNote(fmtDate(selectedDate), noteVal);
@@ -757,6 +781,12 @@ document.getElementById("saveBtn").addEventListener("click", ()=>{
 document.getElementById("noteBtn").addEventListener("click", ()=>{
   const ta = document.getElementById("noteInput");
   setNoteOpen(!ta.classList.contains("open"));
+});
+document.getElementById("absentBtn").addEventListener("click", ()=>{
+  const on = !absentOn;
+  setAbsent(on);
+  if(on) setNoteOpen(true);
+  else if(!document.getElementById("noteInput").value.trim()) setNoteOpen(false);
 });
 document.getElementById("deleteBtn").addEventListener("click", ()=>{
   storeNote(fmtDate(selectedDate), "");
