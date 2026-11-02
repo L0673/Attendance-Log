@@ -18,7 +18,6 @@
     --level-4:#39d353;
     --bad:#f85149;
     --accent:#2f81f7;
-    --absent:#21262d;
   }
   *{box-sizing:border-box;}
   body{
@@ -161,7 +160,7 @@
   .cell.level-3{background:var(--level-3);}
   .cell.level-4{background:var(--level-4);}
   .cell.bad{background:var(--bad);}
-  .cell.absent{background:var(--absent);}
+  .cell.absent{background:repeating-linear-gradient(135deg,var(--empty) 0 5px,var(--border) 5px 9px);}
   .modal.is-absent .time-fields{display:none;}
   .spacer{width:100%;}
   .footer{
