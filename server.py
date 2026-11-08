@@ -58,6 +58,8 @@ def enrich(key, e):
         "out": e.get("out") or None,
         "hours": None if hrs is None else round(hrs, 2),
     }
+    if e.get("absent") and not rec["in"]:
+        rec["absent"] = True
     if e.get("note"):
         rec["note"] = e["note"]
     return rec
@@ -93,6 +95,7 @@ def compute_summary(entries):
         "avg_arrival": avg_arrival,
         "avg_hours": round(hours_sum / hours_count, 2) if hours_count else None,
         "logged_days": logged,
+        "absent_days": sum(1 for e in entries.values() if e.get("absent") and not e.get("in")),
     }
 
 
@@ -136,7 +139,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     raise ValueError("missing date")
                 Date.fromisoformat(date)  
                 data = load_data()
-                if entry and (entry.get("in") or entry.get("out")):
+                if entry and entry.get("absent") and not entry.get("in"):
+                    # يوم غياب: بدون وقت حضور، ومعه نوت اختياري
+                    record = {"in": None, "out": None, "absent": True}
+                    note = str(entry.get("note") or "").strip()
+                    if note:
+                        record["note"] = note[:2000]
+                    data[date] = record
+                elif entry and (entry.get("in") or entry.get("out")):
                     record = {"in": entry.get("in") or None, "out": entry.get("out") or None}
                     note = str(entry.get("note") or "").strip()
                     if note:
