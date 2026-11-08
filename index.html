@@ -361,7 +361,7 @@ function toMinutes(hhmm){
   const [h,m] = hhmm.split(":").map(Number);
   return h*60+m;
 }
-function fmtClock(mins){ return ((Math.floor(mins/60) + 11) % 12 + 1) + ":" + String(mins%60).padStart(2,"0"); }
+function fmtClock(mins){ return ((Math.floor(mins/60) + 11) % 12 + 1) + ":" + String(mins%60).padStart(2,"0") + (Math.floor(mins/60) % 24 >= 12 ? "PM" : "AM"); }
 // Names for each arrival range (same ranges as the heatmap colors)
 const CATEGORIES = [
   {cls:"level-4", name:"Best", range:"up to 7:15", color:"var(--level-4)"},
@@ -813,6 +813,8 @@ function updateStats(){
         if(cls === "bad") bad++;
         const hrs = hoursBetween(entry.in, entry.out);
         if(hrs !== null){ hoursSum += hrs; hoursCount++; }
+      } else if(entry && entry.absent){
+        logged++;   // a day marked absent is still a recorded day (it does not affect averages or ratings)
       }
     }
     cur.setDate(cur.getDate()+1);

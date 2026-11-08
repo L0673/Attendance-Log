@@ -66,7 +66,7 @@ def enrich(key, e):
 
 
 def compute_summary(entries):
-    best = late = logged = arrival_sum = hours_count = 0
+    best = late = logged = arrival_sum = hours_count = absent_logged = 0
     hours_sum = 0.0
     cur = START_DATE
     while cur <= END_DATE:
@@ -84,6 +84,8 @@ def compute_summary(entries):
                 if hrs is not None:
                     hours_sum += hrs
                     hours_count += 1
+            elif e and e.get("absent"):
+                absent_logged += 1  # يوم غياب: يُحسب ضمن الأيام المسجلة فقط، وليس في المتوسطات
         cur += timedelta(days=1)
     avg_arrival = "-"
     if logged:
@@ -94,7 +96,7 @@ def compute_summary(entries):
         "late_arrival": late,
         "avg_arrival": avg_arrival,
         "avg_hours": round(hours_sum / hours_count, 2) if hours_count else None,
-        "logged_days": logged,
+        "logged_days": logged + absent_logged,
         "absent_days": sum(1 for e in entries.values() if e.get("absent") and not e.get("in")),
     }
 
